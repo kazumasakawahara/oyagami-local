@@ -10,6 +10,7 @@ dependencies = [
     "fugashi>=1.5.2",
     "httpx>=0.28.1",
     "neo4j>=6.1.0",
+    "openai-whisper>=20250625",
     "openpyxl>=3.1.5",
     "pdfplumber>=0.11.9",
     "pydantic>=2.12.5",
