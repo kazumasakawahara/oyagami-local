@@ -105,6 +105,21 @@ pnpm dev
 # ブラウザで http://localhost:3000 を開く
 ```
 
+### ワンコマンド起動
+
+`scripts/setup.sh` で全サービスを一括管理できます。
+
+```bash
+# フル起動（競合停止 → Neo4j → Ollama → Backend → Frontend）
+./scripts/setup.sh
+
+# 全停止
+./scripts/setup.sh --stop
+
+# 状態確認
+./scripts/setup.sh --status
+```
+
 ---
 
 ## 画面一覧
@@ -112,7 +127,7 @@ pnpm dev
 | 画面 | パス | 説明 |
 |---|---|---|
 | ダッシュボード | `/` | 統計・更新期限アラート・最近の活動 |
-| ナラティブ入力 | `/narrative` | テキスト→AI抽出→確認→登録の3ステップ |
+| ナラティブ入力 | `/narrative` | テキスト入力またはファイルアップロード（docx/xlsx/pdf/txt）→AI抽出→確認→登録の3ステップ |
 | クイックログ | `/quicklog` | 30秒で日常記録 |
 | クライアント一覧 | `/clients` | あかさたなフィルタ付き検索 |
 | AIチャット | `/chat` | マルチエージェント対話（WebSocket） |
@@ -131,11 +146,17 @@ pnpm dev
 | POST | `/api/narratives/extract` | ナラティブテキストからAI抽出 |
 | POST | `/api/narratives/register` | 抽出データをDBに登録 |
 | POST | `/api/quicklog` | クイックログ登録 |
-| GET | `/api/search` | セマンティック検索 |
-| GET | `/api/system/models` | モデル一覧・ロード状態 |
+| GET | `/api/search/fulltext` | 全文検索 |
+| GET | `/api/system/status` | Ollama/Neo4j接続状態・ロード済みモデル |
 | POST | `/api/system/models/{name}/load` | モデルのロード |
-| DELETE | `/api/system/models/{name}` | モデルのアンロード |
-| WS | `/ws/chat` | AIチャット（WebSocket） |
+| POST | `/api/system/models/{name}/unload` | モデルのアンロード |
+| POST | `/api/narratives/upload` | ファイルアップロード（docx/xlsx/pdf/txt） |
+| POST | `/api/narratives/validate` | 抽出データのスキーマ検証 |
+| POST | `/api/narratives/safety-check` | 安全性チェック |
+| GET | `/api/clients/{name}/emergency` | 緊急情報（NgAction優先） |
+| GET | `/api/clients/{name}/logs` | 支援記録一覧 |
+| GET | `/api/dashboard/activity` | 最近の活動ログ |
+| WS | `/api/chat/ws` | AIチャット（WebSocket） |
 
 ---
 
@@ -155,6 +176,8 @@ oyagami-local/
 ├── .env.example            # 環境変数テンプレート
 ├── README.md               # このファイル
 ├── CLAUDE.md               # AI アシスタント向けガイド
+├── scripts/
+│   └── setup.sh            # ワンコマンド起動/停止スクリプト
 ├── backend/
 │   ├── app/
 │   │   ├── main.py         # FastAPI エントリポイント

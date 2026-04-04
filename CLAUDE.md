@@ -32,6 +32,11 @@ uv run uvicorn app.main:app --reload --port 8000
 # フロントエンド（ポート 3000）
 cd ~/Dev-Work/oyagami-local/frontend
 pnpm dev
+
+# ワンコマンド起動
+./scripts/setup.sh          # 全サービス起動
+./scripts/setup.sh --stop   # 全停止
+./scripts/setup.sh --status # 状態確認
 ```
 
 ## テスト
