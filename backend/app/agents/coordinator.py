@@ -9,11 +9,14 @@ from app.schemas.agent import IntentCategory, RoutingDecision
 
 logger = logging.getLogger(__name__)
 
-EMERGENCY_KEYWORDS = {"パニック", "SOS", "事故", "発作", "倒れた", "救急", "助けて", "緊急"}
+# 現在進行中の危機のみ（情報照会は QUERY に回す）
+CRISIS_KEYWORDS = {"パニック中", "倒れた", "倒れている", "SOS", "発作が", "救急車", "助けて", "意識がない"}
+INQUIRY_INDICATORS = {"教えて", "調べて", "確認", "一覧", "リスト", "知りたい"}
+
 REGISTRATION_KEYWORDS = {"登録", "記録して", "入力", "保存して", "記載して"}
 ANALYSIS_KEYWORDS = {"分析", "比較", "方針", "傾向", "なぜ", "考察", "評価"}
-# Use specific phrases to avoid false positives (e.g. "使い方を教えて" should be GENERAL)
-QUERY_KEYWORDS = {"一覧を教えて", "検索", "確認して", "見せて", "表示", "リストを", "を教えて", "について教えて"}
+QUERY_KEYWORDS = {"一覧を教えて", "検索", "確認して", "見せて", "表示", "リストを", "を教えて", "について教えて",
+                  "緊急連絡", "連絡先", "禁忌", "病院", "後見人"}
 
 GENERAL_PATTERNS = {"こんにちは", "おはよう", "ありがとう", "使い方", "ヘルプ", "help", "Hello", "hello"}
 
@@ -42,8 +45,10 @@ COORDINATOR_SYSTEM_PROMPT = """あなたはユーザーの意図を分類する�
 
 def classify_intent(text: str) -> RoutingDecision:
     """Classify user intent using keyword matching (fast, no LLM)."""
-    # Emergency check first (safety-critical)
-    if any(kw in text for kw in EMERGENCY_KEYWORDS):
+    # 情報照会は緊急扱いしない
+    is_inquiry = any(kw in text for kw in INQUIRY_INDICATORS)
+    # 現在進行中の危機のみ Safety First
+    if not is_inquiry and any(kw in text for kw in CRISIS_KEYWORDS):
         return _build_decision(IntentCategory.EMERGENCY, "緊急キーワード検知")
     # General patterns take priority over query to avoid false positives
     if any(kw in text for kw in GENERAL_PATTERNS):
@@ -59,8 +64,9 @@ def classify_intent(text: str) -> RoutingDecision:
 
 async def route_with_llm(text: str) -> RoutingDecision:
     """Classify user intent using mistral-small LLM."""
-    # Emergency always uses keyword check (speed critical)
-    if any(kw in text for kw in EMERGENCY_KEYWORDS):
+    # 現在進行中の危機のみ Safety First（情報照会は除外）
+    is_inquiry = any(kw in text for kw in INQUIRY_INDICATORS)
+    if not is_inquiry and any(kw in text for kw in CRISIS_KEYWORDS):
         return _build_decision(IntentCategory.EMERGENCY, "緊急キーワード検知")
 
     try:
