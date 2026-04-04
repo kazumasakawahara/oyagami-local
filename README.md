@@ -22,6 +22,8 @@
 - **ModelManager による自動切替** — 128GB 統合メモリ内でのモデルのロード/アンロードを自動管理
 - **Next.js + shadcn/ui による業務向けモダンUI** — ダッシュボード、ナラティブ入力、クイックログ、AIチャット
 - **Safety First** — 緊急時は LLM を経由せず Neo4j を直接検索し、禁忌事項（NgAction）を最優先で返却
+- **Neo4j Browser風エコマップ** — React Flowでダーク背景＋円形カラーノードの支援ネットワーク可視化
+- **ローカル音声文字起こし** — OpenAI Whisperで面談音声をテキスト化、embeddingで検索可能に
 
 ---
 
@@ -65,6 +67,7 @@ oyagami-local/
   - 必須モデル: `mistral-small`, `nomic-embed-text`
   - 推奨モデル: `deepseek-r1:70b`, `llama4`, `qwen3-coder:30b`
 - **Neo4j**: 5.15+（Docker）— `neo4j-agno-agent` の docker-compose を使用
+- **ffmpeg**: 最新版（Whisper音声文字起こし用）
 
 ---
 
@@ -132,6 +135,9 @@ pnpm dev
 | クライアント一覧 | `/clients` | あかさたなフィルタ付き検索 |
 | AIチャット | `/chat` | マルチエージェント対話（WebSocket） |
 | LLM設定 | `/settings` | モデルロード/アンロード・メモリ監視 |
+| セマンティック検索 | `/search` | ベクトル類似度による支援記録・ケア指示検索 |
+| エコマップ | `/ecomap` | Neo4j Browser風グラフ表示で支援ネットワーク可視化 |
+| 面談記録 | `/meetings` | 音声アップロード→Whisper文字起こし→Neo4j登録 |
 
 ---
 
@@ -147,6 +153,12 @@ pnpm dev
 | POST | `/api/narratives/register` | 抽出データをDBに登録 |
 | POST | `/api/quicklog` | クイックログ登録 |
 | GET | `/api/search/fulltext` | 全文検索 |
+| POST | `/api/search/semantic` | セマンティック検索（ベクトル類似度） |
+| GET | `/api/ecomap/templates` | エコマップテンプレート一覧 |
+| GET | `/api/ecomap/colors` | カテゴリカラーマッピング |
+| GET | `/api/ecomap/{name}` | エコマップデータ生成 |
+| POST | `/api/meetings/upload` | 音声ファイルアップロード・文字起こし |
+| GET | `/api/meetings/{name}` | 面談記録一覧 |
 | GET | `/api/system/status` | Ollama/Neo4j接続状態・ロード済みモデル |
 | POST | `/api/system/models/{name}/load` | モデルのロード |
 | POST | `/api/system/models/{name}/unload` | モデルのアンロード |
@@ -198,7 +210,15 @@ oyagami-local/
 │   │   │   ├── search.py
 │   │   │   └── system.py
 │   │   ├── lib/            # 共有ライブラリ
+│   │   │   ├── chunking.py     # テキストチャンキング
+│   │   │   ├── transcription.py # Whisper音声文字起こし
+│   │   │   └── ecomap.py       # エコマップデータ生成
+│   │   ├── routers/        # FastAPI ルーター（続き）
+│   │   │   ├── ecomap.py       # エコマップAPI
+│   │   │   └── meetings.py     # 面談記録API
 │   │   └── schemas/        # Pydantic スキーマ
+│   ├── scripts/
+│   │   └── backfill_embeddings.py  # 既存ノードへのembedding付与
 │   ├── tests/              # pytest テスト
 │   ├── pyproject.toml
 │   └── uv.lock
@@ -210,10 +230,14 @@ oyagami-local/
     │   │   ├── quicklog/
     │   │   ├── clients/
     │   │   ├── chat/
-    │   │   └── settings/
+    │   │   ├── settings/
+    │   │   ├── search/
+    │   │   ├── ecomap/
+    │   │   └── meetings/
     │   ├── components/     # shadcn/ui コンポーネント
     │   ├── hooks/          # カスタムフック
     │   └── lib/            # ユーティリティ
+    ├── e2e/                # Playwright E2Eテスト
     ├── package.json
     └── pnpm-lock.yaml
 ```
