@@ -26,22 +26,10 @@ logger = logging.getLogger(__name__)
 # Model sets
 # ---------------------------------------------------------------------------
 
-# Always resident (small, frequently used)
-RESIDENT_MODELS: frozenset[str] = frozenset(
-    [
-        "mistral-small:latest",
-        "nomic-embed-text:latest",
-    ]
-)
-
-# Only ONE exclusive model may be loaded at a time
-EXCLUSIVE_MODELS: frozenset[str] = frozenset(
-    [
-        "deepseek-r1:70b",
-        "llama4:latest",
-        "qwen3-coder:30b",
-    ]
-)
+# Populated from settings in _build_singleton().
+# Defaults here are only for standalone testing.
+RESIDENT_MODELS: frozenset[str] = frozenset()
+EXCLUSIVE_MODELS: frozenset[str] = frozenset()
 
 # keep_alive values
 _KEEP_ALIVE_RESIDENT = "24h"
@@ -62,9 +50,16 @@ _TIMEOUT_STATUS = 10.0
 class ModelManager:
     """Manages Ollama model loading/unloading within a 128 GB memory budget."""
 
-    def __init__(self, base_url: str) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        resident_models: frozenset[str] | None = None,
+        exclusive_models: frozenset[str] | None = None,
+    ) -> None:
         self._base_url = base_url.rstrip("/")
         self._client = httpx.AsyncClient(base_url=self._base_url)
+        self._resident = resident_models or RESIDENT_MODELS
+        self._exclusive = exclusive_models or EXCLUSIVE_MODELS
         # Name of the currently loaded exclusive model (or None)
         self._current_exclusive: str | None = None
 
@@ -74,7 +69,7 @@ class ModelManager:
 
     def is_resident(self, model: str) -> bool:
         """Return True if *model* belongs to the resident set."""
-        return model in RESIDENT_MODELS
+        return model in self._resident
 
     def needs_switch(self, model: str) -> bool:
         """Return True if loading *model* requires unloading the current exclusive.
@@ -83,7 +78,7 @@ class ModelManager:
         - *model* is an exclusive model, AND
         - a *different* exclusive model is currently loaded.
         """
-        if model not in EXCLUSIVE_MODELS:
+        if model not in self._exclusive:
             return False
         if self._current_exclusive is None:
             return False
@@ -100,7 +95,7 @@ class ModelManager:
         then load the requested model.
         For resident models: just (re-)load with 24h keep_alive.
         """
-        if model in EXCLUSIVE_MODELS:
+        if model in self._exclusive:
             if self.needs_switch(model):
                 logger.info(
                     "Switching exclusive model: %s → %s",
@@ -114,32 +109,47 @@ class ModelManager:
             # Resident or unknown — just load / warm up
             await self._load_model(
                 model,
-                keep_alive=_KEEP_ALIVE_RESIDENT if model in RESIDENT_MODELS else "10m",
+                keep_alive=_KEEP_ALIVE_RESIDENT if model in self._resident else "10m",
             )
 
     async def unload_model(self, model: str) -> None:
         """Unload *model* from Ollama memory."""
         logger.info("Unloading model: %s", model)
-        await self._client.post(
-            "/api/generate",
-            json={"model": model, "keep_alive": _KEEP_ALIVE_UNLOAD},
-            timeout=_TIMEOUT_UNLOAD,
-        )
+        try:
+            await self._client.post(
+                "/api/generate",
+                json={"model": model, "keep_alive": _KEEP_ALIVE_UNLOAD},
+                timeout=_TIMEOUT_UNLOAD,
+            )
+        except Exception as e:
+            logger.warning("Failed to unload model %s: %s", model, e)
         if self._current_exclusive == model:
             self._current_exclusive = None
 
     async def get_status(self) -> dict[str, Any]:
         """Return the current list of loaded models from Ollama /api/ps."""
-        resp = await self._client.get("/api/ps", timeout=_TIMEOUT_STATUS)
-        resp.raise_for_status()
-        return resp.json()
+        try:
+            resp = await self._client.get("/api/ps", timeout=_TIMEOUT_STATUS)
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            logger.warning("Failed to get Ollama status: %s", e)
+            return {"models": []}
 
     async def initialize(self) -> None:
-        """Load all resident models at startup."""
+        """Load all resident models at startup (best-effort)."""
         logger.info("Initializing ModelManager — loading resident models")
-        for model in RESIDENT_MODELS:
-            logger.info("Loading resident model: %s", model)
-            await self._load_model(model, keep_alive=_KEEP_ALIVE_RESIDENT)
+        for model in self._resident:
+            try:
+                logger.info("Loading resident model: %s", model)
+                await self._load_model(model, keep_alive=_KEEP_ALIVE_RESIDENT)
+                logger.info("Resident model loaded: %s", model)
+            except Exception as e:
+                logger.warning(
+                    "Failed to load resident model %s: %s. "
+                    "Run 'ollama pull %s' to install it.",
+                    model, e, model,
+                )
         logger.info("ModelManager initialization complete")
 
     # ------------------------------------------------------------------
@@ -170,7 +180,17 @@ def _build_singleton() -> ModelManager:
     try:
         from app.config import settings  # lazy import to keep module testable standalone
 
-        return ModelManager(base_url=settings.ollama_base_url)
+        resident = frozenset([settings.coordinator_model, settings.embedding_model])
+        exclusive = frozenset([
+            settings.intake_model,
+            settings.analyst_model,
+            settings.cypher_model,
+        ])
+        return ModelManager(
+            base_url=settings.ollama_base_url,
+            resident_models=resident,
+            exclusive_models=exclusive,
+        )
     except Exception:  # pragma: no cover
         logger.warning(
             "Could not import app.config.settings; using default Ollama URL"

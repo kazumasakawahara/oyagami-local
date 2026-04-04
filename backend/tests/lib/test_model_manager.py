@@ -11,9 +11,17 @@ from app.lib.model_manager import ModelManager, RESIDENT_MODELS, EXCLUSIVE_MODEL
 # Helpers
 # ---------------------------------------------------------------------------
 
+_TEST_RESIDENT = frozenset(["mistral-small:latest", "nomic-embed-text"])
+_TEST_EXCLUSIVE = frozenset(["deepseek-r1:70b", "llama4:latest", "qwen3-coder:30b"])
+
+
 def _make_manager() -> ModelManager:
     """Return a fresh ModelManager pointed at a fake Ollama URL."""
-    return ModelManager(base_url="http://fake-ollama:11434")
+    return ModelManager(
+        base_url="http://fake-ollama:11434",
+        resident_models=_TEST_RESIDENT,
+        exclusive_models=_TEST_EXCLUSIVE,
+    )
 
 
 # ---------------------------------------------------------------------------
