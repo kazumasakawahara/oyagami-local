@@ -20,6 +20,17 @@ import "@xyflow/react/dist/style.css";
 import type { EcomapData, EcomapNode as EcomapNodeType } from "@/lib/types";
 import { NodeDetailPanel } from "./NodeDetailPanel";
 
+const handleStyle = {
+  opacity: 0,
+  width: 1,
+  height: 1,
+  top: "50%",
+  left: "50%",
+  transform: "translate(-50%, -50%)",
+  border: "none",
+  background: "transparent",
+} as const;
+
 function CircleNode({ data }: NodeProps) {
   const size = data.isClient ? 80 : 55;
   return (
@@ -60,8 +71,8 @@ function CircleNode({ data }: NodeProps) {
       >
         {data.label as string}
       </span>
-      <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
-      <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
+      <Handle type="source" position={Position.Top} id="center-src" style={handleStyle} />
+      <Handle type="target" position={Position.Top} id="center-tgt" style={handleStyle} />
     </div>
   );
 }
@@ -109,18 +120,20 @@ function buildEdges(edges: EcomapData["edges"]): ReactFlowEdge[] {
     id: `edge-${i}`,
     source: e.source,
     target: e.target,
+    sourceHandle: "center-src",
+    targetHandle: "center-tgt",
     label: e.label,
-    type: "default",
-    style: { stroke: "#666", strokeWidth: 1.5 },
+    type: "straight",
+    style: { stroke: "#888", strokeWidth: 1.2 },
     labelStyle: { fill: "#aaa", fontSize: 9 },
     labelBgStyle: { fill: "#333", fillOpacity: 0.8 },
     labelBgPadding: [4, 2] as [number, number],
     labelBgBorderRadius: 3,
     markerEnd: {
       type: MarkerType.ArrowClosed,
-      color: "#666",
-      width: 15,
-      height: 15,
+      color: "#888",
+      width: 12,
+      height: 12,
     },
   }));
 }
