@@ -27,7 +27,8 @@ async def upload_meeting(
 
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     file_id = uuid.uuid4().hex[:8]
-    file_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
+    safe_filename = Path(file.filename).name.replace("..", "").replace("/", "").replace("\\", "")
+    file_path = UPLOAD_DIR / f"{file_id}_{safe_filename}"
     content = await file.read()
     file_path.write_bytes(content)
 

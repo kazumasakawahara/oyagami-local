@@ -265,8 +265,53 @@ def register_to_database(
                     if label not in registered_types:
                         registered_types.append(label)
 
+            # --- Build temp_id map for source_temp_id/target_temp_id resolution ---
+            temp_id_map = {}
+            for node in nodes:
+                temp_id = node.get("temp_id")
+                if not temp_id:
+                    continue
+                label = node.get("label", "")
+                props = node.get("properties", {}) or {}
+                if label in MERGE_KEYS:
+                    keys = MERGE_KEYS[label]
+                    if keys and keys[0] in props:
+                        temp_id_map[temp_id] = {
+                            "label": label,
+                            "key": keys[0],
+                            "value": props[keys[0]],
+                        }
+                elif label in ALLOWED_CREATE_LABELS:
+                    # For CREATE-only labels, use a unique property if available
+                    for candidate_key in ["date", "id", "title", "filePath"]:
+                        if candidate_key in props:
+                            temp_id_map[temp_id] = {
+                                "label": label,
+                                "key": candidate_key,
+                                "value": props[candidate_key],
+                            }
+                            break
+
             # --- Register relationships ---
             for rel in relationships:
+                # Convert source_temp_id/target_temp_id to from_label/from_key/from_value format
+                if "source_temp_id" in rel and "from_label" not in rel:
+                    src = temp_id_map.get(rel["source_temp_id"])
+                    tgt = temp_id_map.get(rel["target_temp_id"])
+                    if src and tgt:
+                        rel = {
+                            "type": rel.get("type"),
+                            "from_label": src["label"],
+                            "from_key": src["key"],
+                            "from_value": src["value"],
+                            "to_label": tgt["label"],
+                            "to_key": tgt["key"],
+                            "to_value": tgt["value"],
+                            "properties": rel.get("properties", {}),
+                        }
+                    else:
+                        logger.warning("Cannot resolve temp_ids for relationship: %r", rel)
+                        continue
                 _register_relationship(session, rel)
 
             # --- Audit log ---
