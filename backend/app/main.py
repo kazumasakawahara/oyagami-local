@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import chat, narratives, quicklog, search, dashboard, clients, system
+from app.routers import chat, narratives, quicklog, search, dashboard, clients, system, ecomap
 
 
 @asynccontextmanager
@@ -44,6 +44,7 @@ app.include_router(search.router)
 app.include_router(dashboard.router)
 app.include_router(clients.router)
 app.include_router(system.router)
+app.include_router(ecomap.router)
 
 
 @app.get("/api/health")
