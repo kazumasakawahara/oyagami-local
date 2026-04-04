@@ -51,6 +51,11 @@ CATEGORY_QUERIES = {
 }
 
 
+def _sanitize_id(element_id: str) -> str:
+    """Neo4j elementId のコロンをハイフンに置換（React Flow の ID 互換性のため）"""
+    return element_id.replace(":", "-")
+
+
 def fetch_ecomap_data(client_name: str, template: str = "full_view") -> EcomapData:
     tmpl = TEMPLATES.get(template, TEMPLATES["full_view"])
     nodes = [EcomapNode(
@@ -62,15 +67,22 @@ def fetch_ecomap_data(client_name: str, template: str = "full_view") -> EcomapDa
         properties={},
     )]
     edges = []
+    seen_ids: set[str] = set()
+
     for cat in tmpl["categories"]:
         if cat not in CATEGORY_QUERIES:
             continue
         pattern, var, neo4j_label, rel_label = CATEGORY_QUERIES[cat]
-        query = f"MATCH {pattern} WHERE c.name = $name RETURN {var} AS node, elementId({var}) AS eid"
+        query = f"MATCH {pattern} WHERE c.name = $name RETURN DISTINCT {var} AS node, elementId({var}) AS eid"
         records = run_query(query, {"name": client_name})
         for r in records:
+            raw_id = r["eid"]
+            nid = _sanitize_id(raw_id)
+            if nid in seen_ids:
+                continue
+            seen_ids.add(nid)
+
             nd = dict(r["node"])
-            nid = r["eid"]
             display = nd.get("name") or nd.get("action") or nd.get("instruction") or nd.get("type") or str(nd)
             nodes.append(EcomapNode(
                 id=nid,
