@@ -16,6 +16,8 @@ async def lifespan(app: FastAPI):
     else:
         print(f"WARNING: Neo4j not available at {settings.neo4j_uri}")
     await model_manager.initialize()
+    from app.lib.embedding import ensure_vector_indexes
+    ensure_vector_indexes()
     yield
     from app.lib.db_operations import close_driver
     close_driver()
