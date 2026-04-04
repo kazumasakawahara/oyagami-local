@@ -35,6 +35,16 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ text, client_name: clientName }),
       }),
+    upload: async (file: File): Promise<{ filename: string; text: string }> => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`${API_BASE}/api/narratives/upload`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error(`Upload error: ${res.status}`);
+      return res.json();
+    },
     register: (graph: import("./types").ExtractedGraph) =>
       fetchApi("/api/narratives/register", {
         method: "POST",
