@@ -55,4 +55,11 @@ export const api = {
     create: (data: { client_name: string; note: string; situation?: string }) =>
       fetchApi("/api/quicklog", { method: "POST", body: JSON.stringify(data) }),
   },
+  search: {
+    semantic: (query: string, indexName?: string, topK?: number) =>
+      fetchApi<import("./types").SemanticSearchResult[]>("/api/search/semantic", {
+        method: "POST",
+        body: JSON.stringify({ query, index_name: indexName || "support_log_embedding", top_k: topK || 10 }),
+      }),
+  },
 };

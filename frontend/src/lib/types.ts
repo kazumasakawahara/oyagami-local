@@ -48,6 +48,12 @@ export interface ChatMessage {
   session_id?: string;
 }
 
+export interface SemanticSearchResult {
+  score: number;
+  node_label: string;
+  properties: Record<string, unknown>;
+}
+
 export interface ExtractedGraph {
   nodes: { temp_id: string; label: string; properties: Record<string, unknown> }[];
   relationships: { source_temp_id: string; target_temp_id: string; type: string; properties: Record<string, unknown> }[];

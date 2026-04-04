@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Query
 
 from app.lib.db_operations import run_query
+from app.lib.embedding import embed_text, semantic_search
+from app.schemas.search import SemanticSearchRequest, SemanticSearchResult
 
 router = APIRouter(prefix="/api/search", tags=["search"])
 
@@ -19,3 +21,23 @@ async def fulltext_search(q: str = Query(...), limit: int = Query(20)):
         {"query": q, "limit": limit},
     )
     return records
+
+
+@router.post("/semantic", response_model=list[SemanticSearchResult])
+async def search_semantic(request: SemanticSearchRequest):
+    query_embedding = await embed_text(request.query)
+    if not query_embedding:
+        return []
+    results = await semantic_search(
+        query_embedding=query_embedding,
+        index_name=request.index_name,
+        top_k=request.top_k,
+    )
+    return [
+        SemanticSearchResult(
+            score=r["score"],
+            node_label=request.index_name.replace("_embedding", "").replace("_", " ").title(),
+            properties=r["node"],
+        )
+        for r in results
+    ]
