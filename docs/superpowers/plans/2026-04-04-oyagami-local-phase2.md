@@ -325,6 +325,8 @@ git commit -m "feat: add semantic search with vector embeddings (API + frontend)
 - Create: `backend/tests/routers/test_ecomap.py`
 - Modify: `backend/app/main.py`
 
+**設計方針:** draw.io は使用しない。フロントエンドで React Flow を用い、Neo4j Browser 風のグラフ表示を実現する。バックエンドはノード・エッジの構造化データ + カテゴリ色情報を返すのみ。
+
 - [ ] **Step 1: Create ecomap schemas**
 
 ```python
@@ -334,15 +336,17 @@ from pydantic import BaseModel
 
 class EcomapNode(BaseModel):
     id: str
-    label: str
-    category: str
-    properties: dict
+    label: str          # ノード内に表示するテキスト
+    node_label: str     # Neo4j ノードラベル (Client, NgAction, etc.)
+    category: str       # カテゴリ識別子
+    color: str          # ノードの背景色 (hex)
+    properties: dict    # 全プロパティ（詳細パネル用）
 
 
 class EcomapEdge(BaseModel):
     source: str
     target: str
-    label: str
+    label: str          # リレーション名 (MUST_AVOID, REQUIRES, etc.)
 
 
 class EcomapData(BaseModel):
@@ -360,17 +364,16 @@ class EcomapTemplate(BaseModel):
 
 - [ ] **Step 2: Implement ecomap.py library**
 
-Port logic from `~/Dev-Work/neo4j-agno-agent/skills/ecomap_generator/drawio_engine.py`.
-Key adaptations:
-- Remove draw.io XML generation (frontend will render with React Flow)
-- Keep Neo4j query patterns for fetching related nodes
-- Return structured data (EcomapData) instead of XML
-- Support 4 templates: full_view, support_meeting, emergency, handover
-- 9 categories with color codes: ngActions(red), carePreferences(green), keyPersons(blue), guardians(purple), hospitals(cyan), certificates(orange), conditions(yellow), supporters(teal), services(pink)
+Neo4j からグラフデータを取得し、カテゴリ色付きの構造化データを返す。
+draw.io XML 生成は行わない（フロントエンドの React Flow が描画を担当）。
 
 ```python
 # backend/app/lib/ecomap.py
-"""Ecomap data generation from Neo4j graph data."""
+"""Ecomap data generation from Neo4j graph data.
+
+Returns structured graph data with category colors for frontend rendering.
+No draw.io XML generation — frontend uses React Flow with Neo4j Browser styling.
+"""
 import logging
 from app.lib.db_operations import run_query
 from app.schemas.ecomap import EcomapData, EcomapEdge, EcomapNode
@@ -406,41 +409,45 @@ TEMPLATES = {
     },
 }
 
+# Neo4j Browser 風のビビッドな色（ダーク背景映え）
 CATEGORY_COLORS = {
-    "ngActions": "#ef4444",
-    "carePreferences": "#22c55e",
-    "keyPersons": "#3b82f6",
-    "guardians": "#8b5cf6",
-    "hospitals": "#06b6d4",
-    "certificates": "#f97316",
-    "conditions": "#eab308",
-    "supporters": "#14b8a6",
-    "services": "#ec4899",
+    "client":          "#569480",  # Neo4j green (中心ノード)
+    "ngActions":       "#df4b26",  # Neo4j red
+    "carePreferences": "#57c7e3",  # Neo4j cyan
+    "keyPersons":      "#f79767",  # Neo4j orange
+    "guardians":       "#c990c0",  # Neo4j purple
+    "hospitals":       "#4c8eda",  # Neo4j blue
+    "certificates":    "#ffc454",  # Neo4j yellow
+    "conditions":      "#d9c8ae",  # Neo4j beige
+    "supporters":      "#8dcc93",  # Neo4j light green
+    "services":        "#ecb5c9",  # Neo4j pink
 }
 
-# Category → (Cypher pattern, node variable, relationship label)
+# Category → (Cypher pattern, node variable, Neo4j label, relationship label)
 CATEGORY_QUERIES = {
-    "conditions": ("(c)-[:HAS_CONDITION]->(n:Condition)", "n", "HAS_CONDITION"),
-    "ngActions": ("(c)-[:MUST_AVOID]->(n:NgAction)", "n", "MUST_AVOID"),
-    "carePreferences": ("(c)-[:REQUIRES]->(n:CarePreference)", "n", "REQUIRES"),
-    "keyPersons": ("(c)-[:HAS_KEY_PERSON]->(n:KeyPerson)", "n", "HAS_KEY_PERSON"),
-    "guardians": ("(c)-[:HAS_LEGAL_REP]->(n:Guardian)", "n", "HAS_LEGAL_REP"),
-    "hospitals": ("(c)-[:TREATED_AT]->(n:Hospital)", "n", "TREATED_AT"),
-    "certificates": ("(c)-[:HAS_CERTIFICATE]->(n:Certificate)", "n", "HAS_CERTIFICATE"),
-    "supporters": ("(s:Supporter)-[:LOGGED]->(:SupportLog)-[:ABOUT]->(c)", "s", "SUPPORTS"),
-    "services": ("(c)-[:USES_SERVICE]->(n:ServiceProvider)", "n", "USES_SERVICE"),
+    "conditions":      ("(c)-[:HAS_CONDITION]->(n:Condition)",                       "n", "Condition",      "HAS_CONDITION"),
+    "ngActions":       ("(c)-[:MUST_AVOID]->(n:NgAction)",                           "n", "NgAction",       "MUST_AVOID"),
+    "carePreferences": ("(c)-[:REQUIRES]->(n:CarePreference)",                       "n", "CarePreference", "REQUIRES"),
+    "keyPersons":      ("(c)-[:HAS_KEY_PERSON]->(n:KeyPerson)",                      "n", "KeyPerson",      "HAS_KEY_PERSON"),
+    "guardians":       ("(c)-[:HAS_LEGAL_REP]->(n:Guardian)",                        "n", "Guardian",       "HAS_LEGAL_REP"),
+    "hospitals":       ("(c)-[:TREATED_AT]->(n:Hospital)",                            "n", "Hospital",       "TREATED_AT"),
+    "certificates":    ("(c)-[:HAS_CERTIFICATE]->(n:Certificate)",                   "n", "Certificate",    "HAS_CERTIFICATE"),
+    "supporters":      ("(s:Supporter)-[:LOGGED]->(:SupportLog)-[:ABOUT]->(c)",      "s", "Supporter",      "SUPPORTS"),
+    "services":        ("(c)-[:USES_SERVICE]->(n:ServiceProvider)",                   "n", "ServiceProvider", "USES_SERVICE"),
 }
 
 
 def fetch_ecomap_data(client_name: str, template: str = "full_view") -> EcomapData:
-    """Fetch ecomap graph data from Neo4j."""
+    """Fetch ecomap graph data from Neo4j with category colors."""
     tmpl = TEMPLATES.get(template, TEMPLATES["full_view"])
     categories = tmpl["categories"]
 
     nodes = [EcomapNode(
         id="client",
         label=client_name,
+        node_label="Client",
         category="client",
+        color=CATEGORY_COLORS["client"],
         properties={},
     )]
     edges = []
@@ -448,7 +455,7 @@ def fetch_ecomap_data(client_name: str, template: str = "full_view") -> EcomapDa
     for cat in categories:
         if cat not in CATEGORY_QUERIES:
             continue
-        pattern, var, rel_label = CATEGORY_QUERIES[cat]
+        pattern, var, neo4j_label, rel_label = CATEGORY_QUERIES[cat]
         query = f"""
             MATCH {pattern}
             WHERE c.name = $name
@@ -458,11 +465,19 @@ def fetch_ecomap_data(client_name: str, template: str = "full_view") -> EcomapDa
         for r in records:
             node_data = dict(r["node"])
             node_id = r["eid"]
-            display = node_data.get("name") or node_data.get("action") or node_data.get("instruction") or node_data.get("type") or str(node_data)
+            display = (
+                node_data.get("name")
+                or node_data.get("action")
+                or node_data.get("instruction")
+                or node_data.get("type")
+                or str(node_data)
+            )
             nodes.append(EcomapNode(
                 id=node_id,
-                label=str(display)[:40],
+                label=str(display)[:30],
+                node_label=neo4j_label,
                 category=cat,
+                color=CATEGORY_COLORS.get(cat, "#888888"),
                 properties=node_data,
             ))
             edges.append(EcomapEdge(
@@ -484,7 +499,7 @@ def fetch_ecomap_data(client_name: str, template: str = "full_view") -> EcomapDa
 ```python
 # backend/app/routers/ecomap.py
 from fastapi import APIRouter, Query
-from app.lib.ecomap import fetch_ecomap_data, TEMPLATES
+from app.lib.ecomap import fetch_ecomap_data, TEMPLATES, CATEGORY_COLORS
 from app.schemas.ecomap import EcomapData, EcomapTemplate
 
 router = APIRouter(prefix="/api/ecomap", tags=["ecomap"])
@@ -496,6 +511,12 @@ async def list_templates():
         EcomapTemplate(id=k, name=v["name"], description=v["description"])
         for k, v in TEMPLATES.items()
     ]
+
+
+@router.get("/colors")
+async def get_category_colors():
+    """Return category → color mapping for frontend legend."""
+    return CATEGORY_COLORS
 
 
 @router.get("/{client_name}", response_model=EcomapData)
@@ -530,22 +551,39 @@ def test_get_ecomap(client):
     assert "nodes" in data
     assert "edges" in data
     assert data["template"] == "full_view"
+
+def test_get_colors(client):
+    resp = client.get("/api/ecomap/colors")
+    assert resp.status_code == 200
+    colors = resp.json()
+    assert "client" in colors
+    assert "ngActions" in colors
+    assert colors["ngActions"].startswith("#")
 ```
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add -A
-git commit -m "feat: add ecomap backend with Neo4j data fetch and 4 templates"
+git commit -m "feat: add ecomap backend with Neo4j graph data and category colors"
 ```
 
 ---
 
-## Task 4: エコマップ — フロントエンド
+## Task 4: エコマップ — フロントエンド（Neo4j Browser 風）
+
+**設計方針:** Neo4j Browser のグラフ表示を忠実に再現する。
+- **ダーク背景**（#2a2a2a）に鮮やかなカラーノード
+- **円形ノード**（テキストをノード内に表示、文字色は白）
+- **曲線エッジ**（リレーション名をエッジ上にラベル表示）
+- **力学シミュレーション**（force-directed layout）で自然な配置
+- **インタラクション:** ノードドラッグ、ズーム/パン、クリックでプロパティパネル表示
+- 中心のクライアントノードは他より大きく表示
 
 **Files:**
 - Create: `frontend/src/app/ecomap/page.tsx`
 - Create: `frontend/src/components/domain/EcomapViewer.tsx`
+- Create: `frontend/src/components/domain/NodeDetailPanel.tsx`
 - Modify: `frontend/src/lib/api.ts`
 - Modify: `frontend/src/lib/types.ts`
 - Modify: `frontend/src/components/domain/Sidebar.tsx`
@@ -564,13 +602,15 @@ Add to `types.ts`:
 export interface EcomapNode {
   id: string;
   label: string;
+  node_label: string;    // Neo4j label (Client, NgAction, etc.)
   category: string;
+  color: string;         // hex color
   properties: Record<string, unknown>;
 }
 export interface EcomapEdge {
   source: string;
   target: string;
-  label: string;
+  label: string;         // relationship name
 }
 export interface EcomapData {
   client_name: string;
@@ -589,38 +629,78 @@ Add to `api.ts`:
 ```typescript
 ecomap: {
   templates: () => fetchApi<EcomapTemplate[]>("/api/ecomap/templates"),
+  colors: () => fetchApi<Record<string, string>>("/api/ecomap/colors"),
   get: (name: string, template?: string) =>
     fetchApi<EcomapData>(`/api/ecomap/${encodeURIComponent(name)}?template=${template || "full_view"}`),
 },
 ```
 
-- [ ] **Step 3: Create EcomapViewer component**
+- [ ] **Step 3: Create Neo4j Browser 風カスタムノード**
 
 `frontend/src/components/domain/EcomapViewer.tsx`:
-- React Flow でノードとエッジを描画
-- カテゴリ別の色分け（CATEGORY_COLORS に対応）
-- クライアントノードを中心に放射状レイアウト
-- ノードクリックで詳細表示（properties をポップオーバー）
-- ズーム/パン対応
 
-- [ ] **Step 4: Create ecomap page**
+React Flow のカスタムノードとして Neo4j Browser 風の円形ノードを実装する。
+
+**カスタムノードの仕様:**
+- **形状:** 円形（border-radius: 50%）
+- **サイズ:** クライアントノードは直径80px、他は直径60px
+- **色:** バックエンドから受け取った `color` を背景色に使用
+- **テキスト:** ノード中央に白文字で `label` を表示（はみ出す場合は省略）
+- **サブラベル:** ノード下部に小さく `node_label`（Neo4jラベル）を表示
+- **ホバー:** 軽くスケールアップ + ドロップシャドウ強調
+
+**エッジの仕様:**
+- **スタイル:** 曲線（bezier）、色は #666
+- **矢印:** ターゲット側に矢印マーカー
+- **ラベル:** リレーション名をエッジ中央に表示（半透明背景付き、フォントサイズ小）
+
+**レイアウト:**
+- 力学シミュレーション（d3-force）で初期配置
+  - クライアントノードを中心に固定
+  - 他ノードが放射状に広がる
+  - カテゴリ内のノード同士は近くに配置
+- ユーザーがドラッグした位置は保持
+
+**背景:**
+- `#2a2a2a`（Neo4j Browser のダーク背景）
+- グリッドドット（#3a3a3a）
+- React Flow の MiniMap を右下に表示
+
+- [ ] **Step 4: Create NodeDetailPanel**
+
+`frontend/src/components/domain/NodeDetailPanel.tsx`:
+
+ノードクリック時に右側にスライドインするプロパティパネル。
+- **ヘッダー:** ノードラベル + カテゴリバッジ（色付き）
+- **プロパティ一覧:** key-value のテーブル形式
+- 閉じるボタン（×）
+- NgAction の場合は riskLevel をバッジで強調表示
+
+- [ ] **Step 5: Create ecomap page**
 
 `frontend/src/app/ecomap/page.tsx`:
-- クライアント選択ドロップダウン（api.clients.list()）
-- テンプレート選択ラジオボタン（api.ecomap.templates()）
-- EcomapViewer コンポーネント
-- カテゴリ凡例（色付きバッジ）
+- **上部:** クライアント選択ドロップダウン + テンプレート選択ラジオボタン
+- **中央:** EcomapViewer（画面の残り全体を使用、高さ calc(100vh - 200px)）
+- **下部:** カテゴリ凡例（色付き丸 + カテゴリ名の横並びリスト）
+- 背景は全体をダークにしてグラフと一体感を出す
 
-- [ ] **Step 5: Update sidebar**
+- [ ] **Step 6: Update sidebar**
 
 Add `/ecomap` to Sidebar navigation under 「活用」 section.
 
-- [ ] **Step 6: Verify build and commit**
+- [ ] **Step 7: Verify build and commit**
 
 ```bash
 cd ~/Dev-Work/oyagami-local/frontend && pnpm build
 git add -A
-git commit -m "feat: add ecomap visualization with React Flow and category colors"
+git commit -m "feat: add Neo4j Browser-style ecomap with React Flow
+
+- Dark background (#2a2a2a) with vivid category-colored circular nodes
+- Force-directed layout with client node at center
+- Curved edges with relationship labels
+- Click-to-inspect property panel
+- Drag, zoom, pan interaction
+- MiniMap and category legend"
 ```
 
 ---
