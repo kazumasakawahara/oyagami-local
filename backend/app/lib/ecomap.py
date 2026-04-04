@@ -56,6 +56,21 @@ def _sanitize_id(element_id: str) -> str:
     return element_id.replace(":", "-")
 
 
+def _sanitize_properties(props: dict) -> dict:
+    """Neo4j 固有型（Date, DateTime 等）を文字列に変換し JSON シリアライズ可能にする"""
+    result = {}
+    for k, v in props.items():
+        if v is None:
+            result[k] = None
+        elif isinstance(v, (str, int, float, bool)):
+            result[k] = v
+        elif isinstance(v, list):
+            result[k] = [str(item) for item in v]
+        else:
+            result[k] = str(v)
+    return result
+
+
 def fetch_ecomap_data(client_name: str, template: str = "full_view") -> EcomapData:
     tmpl = TEMPLATES.get(template, TEMPLATES["full_view"])
     nodes = [EcomapNode(
@@ -82,7 +97,7 @@ def fetch_ecomap_data(client_name: str, template: str = "full_view") -> EcomapDa
                 continue
             seen_ids.add(nid)
 
-            nd = dict(r["node"])
+            nd = _sanitize_properties(dict(r["node"]))
             display = nd.get("name") or nd.get("action") or nd.get("instruction") or nd.get("type") or str(nd)
             nodes.append(EcomapNode(
                 id=nid,
