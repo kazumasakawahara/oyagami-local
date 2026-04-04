@@ -58,3 +58,39 @@ export interface ExtractedGraph {
   nodes: { temp_id: string; label: string; properties: Record<string, unknown> }[];
   relationships: { source_temp_id: string; target_temp_id: string; type: string; properties: Record<string, unknown> }[];
 }
+
+export interface EcomapNode {
+  id: string;
+  label: string;
+  node_label: string;
+  category: string;
+  color: string;
+  properties: Record<string, unknown>;
+}
+
+export interface EcomapEdge {
+  source: string;
+  target: string;
+  label: string;
+}
+
+export interface EcomapData {
+  client_name: string;
+  template: string;
+  nodes: EcomapNode[];
+  edges: EcomapEdge[];
+}
+
+export interface EcomapTemplate {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface MeetingRecord {
+  date: string | null;
+  title: string | null;
+  transcript: string | null;
+  note: string | null;
+  client_name: string | null;
+}

@@ -62,4 +62,26 @@ export const api = {
         body: JSON.stringify({ query, index_name: indexName || "support_log_embedding", top_k: topK || 10 }),
       }),
   },
+  meetings: {
+    upload: async (file: File, clientName: string, title?: string, note?: string) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("client_name", clientName);
+      if (title) formData.append("title", title);
+      if (note) formData.append("note", note);
+      const res = await fetch(`${API_BASE}/api/meetings/upload`, { method: "POST", body: formData });
+      if (!res.ok) throw new Error(`Upload error: ${res.status}`);
+      return res.json();
+    },
+    list: (clientName: string) =>
+      fetchApi<import("./types").MeetingRecord[]>(`/api/meetings/${encodeURIComponent(clientName)}`),
+  },
+  ecomap: {
+    templates: () => fetchApi<import("./types").EcomapTemplate[]>("/api/ecomap/templates"),
+    colors: () => fetchApi<Record<string, string>>("/api/ecomap/colors"),
+    get: (name: string, template?: string) =>
+      fetchApi<import("./types").EcomapData>(
+        `/api/ecomap/${encodeURIComponent(name)}?template=${template || "full_view"}`
+      ),
+  },
 };
