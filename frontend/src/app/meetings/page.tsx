@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AudioUploader } from "@/components/domain/AudioUploader";
+import { ClientCombobox } from "@/components/domain/ClientCombobox";
 import { api } from "@/lib/api";
 
 export default function MeetingsPage() {
@@ -27,18 +28,7 @@ export default function MeetingsPage() {
           <CardTitle className="text-base">面談記録一覧</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <select
-            value={selectedClient}
-            onChange={(e) => setSelectedClient(e.target.value)}
-            className="w-full border rounded px-3 py-2 text-sm"
-          >
-            <option value="">クライアントを選択</option>
-            {clients?.map((c) => (
-              <option key={c.name} value={c.name}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <ClientCombobox clients={clients ?? []} value={selectedClient} onChange={setSelectedClient} placeholder="クライアントを選択" />
           {!meetings?.length ? (
             <p className="text-sm text-muted-foreground">
               {selectedClient ? "記録なし" : "クライアントを選択してください"}

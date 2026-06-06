@@ -59,6 +59,7 @@ def list_clients(
             summaries.append(
                 ClientSummary(
                     name=row["name"],
+                    kana=kana,
                     dob=str(dob) if dob else None,
                     age=age,
                     blood_type=row.get("blood_type"),

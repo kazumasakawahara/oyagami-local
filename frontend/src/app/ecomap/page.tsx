@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { EcomapViewer } from "@/components/domain/EcomapViewer";
+import { ClientCombobox } from "@/components/domain/ClientCombobox";
 import { api } from "@/lib/api";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -57,18 +58,7 @@ export default function EcomapPage() {
           <label className="text-sm font-medium mb-1 block">
             クライアント
           </label>
-          <select
-            value={selectedClient}
-            onChange={(e) => setSelectedClient(e.target.value)}
-            className="border rounded px-3 py-2 text-sm min-w-[200px]"
-          >
-            <option value="">選択してください</option>
-            {clients?.map((c) => (
-              <option key={c.name} value={c.name}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <ClientCombobox clients={clients ?? []} value={selectedClient} onChange={setSelectedClient} className="min-w-[200px]" />
         </div>
         <div className="flex gap-2">
           {templates?.map((t) => (

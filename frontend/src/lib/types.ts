@@ -1,5 +1,6 @@
 export interface ClientSummary {
   name: string;
+  kana?: string | null;
   dob: string | null;
   age: number | null;
   blood_type: string | null;

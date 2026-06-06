@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { ClientCombobox } from "@/components/domain/ClientCombobox";
 import { api } from "@/lib/api";
 
 export default function QuickLogPage() {
@@ -32,11 +33,7 @@ export default function QuickLogPage() {
         <CardContent className="space-y-4">
           <div>
             <label className="text-sm font-medium mb-1 block">クライアント</label>
-            <select value={selectedClient} onChange={(e) => setSelectedClient(e.target.value)}
-              className="w-full border rounded px-3 py-2 text-sm">
-              <option value="">選択してください</option>
-              {clients?.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
-            </select>
+            <ClientCombobox clients={clients ?? []} value={selectedClient} onChange={setSelectedClient} />
           </div>
           <div>
             <label className="text-sm font-medium mb-1 block">状況（任意）</label>

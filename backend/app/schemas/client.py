@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 class ClientSummary(BaseModel):
     name: str
+    kana: str | None = None
     dob: str | None = None
     age: int | None = None
     blood_type: str | None = None

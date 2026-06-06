@@ -5,12 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { ClientCombobox } from "@/components/domain/ClientCombobox";
 import { api } from "@/lib/api";
 
 const ACCEPTED = ".mp3,.wav,.m4a,.ogg,.flac,.aac,.webm";
 
 interface Props {
-  clients: { name: string }[];
+  clients: { name: string; kana?: string | null }[];
   onUploaded?: () => void;
 }
 
@@ -49,18 +50,7 @@ export function AudioUploader({ clients, onUploaded }: Props) {
       <CardContent className="space-y-3">
         <div>
           <label className="text-sm font-medium mb-1 block">クライアント</label>
-          <select
-            value={selectedClient}
-            onChange={(e) => setSelectedClient(e.target.value)}
-            className="w-full border rounded px-3 py-2 text-sm"
-          >
-            <option value="">選択してください</option>
-            {clients.map((c) => (
-              <option key={c.name} value={c.name}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <ClientCombobox clients={clients} value={selectedClient} onChange={setSelectedClient} />
         </div>
         <div>
           <label className="text-sm font-medium mb-1 block">音声ファイル</label>
