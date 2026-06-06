@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from neo4j import GraphDatabase, Driver
+from neo4j.time import Date, DateTime, Time, Duration
 
 from app.config import settings
 
@@ -112,12 +113,36 @@ def is_db_available() -> bool:
 # Query execution
 # ---------------------------------------------------------------------------
 
+def _to_serializable(value: Any) -> Any:
+    """Recursively convert Neo4j temporal types to JSON-serializable values.
+
+    Neo4j's ``record.data()`` preserves ``neo4j.time.{Date,DateTime,Time,Duration}``
+    objects, which FastAPI's JSON encoder cannot serialize (causing a 500 at
+    response-rendering time, outside the route's try/except). Convert them to
+    ISO-8601 strings so any endpoint returning raw query results -- including
+    node maps via ``n {.*}`` -- is safe.
+    """
+    if isinstance(value, (Date, DateTime, Time, Duration)):
+        try:
+            return value.iso_format()
+        except Exception:
+            return str(value)
+    if isinstance(value, dict):
+        return {k: _to_serializable(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_to_serializable(v) for v in value]
+    return value
+
+
 def run_query(query: str, params: dict | None = None) -> list[dict]:
-    """Execute a Cypher query and return all records as a list of dicts."""
+    """Execute a Cypher query and return all records as a list of dicts.
+
+    Neo4j temporal types are converted to ISO-8601 strings for JSON safety.
+    """
     driver = get_driver()
     with driver.session() as session:
         result = session.run(query, params or {})
-        return [record.data() for record in result]
+        return [_to_serializable(record.data()) for record in result]
 
 
 # ---------------------------------------------------------------------------
