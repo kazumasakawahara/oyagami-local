@@ -55,11 +55,14 @@ class ModelManager:
         base_url: str,
         resident_models: frozenset[str] | None = None,
         exclusive_models: frozenset[str] | None = None,
+        embedding_models: frozenset[str] | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._client = httpx.AsyncClient(base_url=self._base_url)
         self._resident = resident_models or RESIDENT_MODELS
         self._exclusive = exclusive_models or EXCLUSIVE_MODELS
+        # Embedding-only models cannot be warmed up via /api/generate.
+        self._embedding = embedding_models or frozenset()
         # Name of the currently loaded exclusive model (or None)
         self._current_exclusive: str | None = None
 
@@ -157,17 +160,33 @@ class ModelManager:
     # ------------------------------------------------------------------
 
     async def _load_model(self, model: str, keep_alive: str | int) -> None:
-        """Warm-up a model by sending a trivial generate request."""
-        resp = await self._client.post(
-            "/api/generate",
-            json={
-                "model": model,
-                "prompt": "ready",
-                "keep_alive": keep_alive,
-                "stream": False,
-            },
-            timeout=_TIMEOUT_LOAD,
-        )
+        """Warm-up a model by sending a trivial request.
+
+        Embedding-only models (e.g. nomic-embed-text) do not support
+        /api/generate and return HTTP 400, so they are warmed up via the
+        /api/embed endpoint instead.
+        """
+        if model in self._embedding:
+            resp = await self._client.post(
+                "/api/embed",
+                json={
+                    "model": model,
+                    "input": "ready",
+                    "keep_alive": keep_alive,
+                },
+                timeout=_TIMEOUT_LOAD,
+            )
+        else:
+            resp = await self._client.post(
+                "/api/generate",
+                json={
+                    "model": model,
+                    "prompt": "ready",
+                    "keep_alive": keep_alive,
+                    "stream": False,
+                },
+                timeout=_TIMEOUT_LOAD,
+            )
         resp.raise_for_status()
 
 
@@ -186,10 +205,12 @@ def _build_singleton() -> ModelManager:
             settings.analyst_model,
             settings.cypher_model,
         ])
+        embedding = frozenset([settings.embedding_model])
         return ModelManager(
             base_url=settings.ollama_base_url,
             resident_models=resident,
             exclusive_models=exclusive,
+            embedding_models=embedding,
         )
     except Exception:  # pragma: no cover
         logger.warning(
