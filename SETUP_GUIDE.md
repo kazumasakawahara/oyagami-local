@@ -445,6 +445,8 @@ pnpm dev
  ✓ Ready in X.Xs
 ```
 
+💡 **必ず Local の `http://localhost:3000` を開いてください**。`pnpm dev` は上記のように `Local`（`http://localhost:3000`）と `Network`（`http://192.168.x.x:3000` のような LAN の IP アドレス）の2種類の URL を表示しますが、**`Network` 側の URL を開くと画面は表示されてもバックエンドに接続できません**（「Ollama: 未接続」「Neo4j: 未接続」と表示され、ホットリロードも効かなくなります）。これはバックエンドが `localhost` からのアクセスのみを許可しているためで、セキュリティ上の正常な挙動です。同じ Mac で使う場合は必ず `Local` の URL を開いてください。
+
 ### 動作確認
 
 以下の方法で、全体が正しく動作しているか確認してください。
@@ -462,6 +464,8 @@ curl http://localhost:8000/api/health
 ```json
 {"status": "ok"}
 ```
+
+💡 **`http://localhost:8000`（末尾に何もつけずに）を開くと `404 Not Found` が表示されますが、これは正常です**。このバックエンドはルート（`/`）に画面を持たないためです。ブラウザで視覚的に確認したい場合は、API ドキュメント [http://localhost:8000/docs](http://localhost:8000/docs) を開いてください。`narratives` / `quicklog` / `search` / `dashboard` などのエンドポイント一覧（Swagger UI）が表示されれば、バックエンドは正常に起動しています。
 
 **2. フロントエンドの確認**
 
@@ -551,6 +555,8 @@ npx playwright test
 | `uv: command not found` | uv のパスが通っていない | ターミナルを閉じて開き直してください。それでも解決しない場合は `source ~/.zshrc` を実行 |
 | `curl: (7) Failed to connect to localhost port 8000` | バックエンドが起動していない | ターミナル1 でバックエンドを起動してください |
 | ブラウザに「接続が拒否されました」と表示される | サーバーが起動していない | バックエンド・フロントエンドの両方が起動しているか確認してください |
+| `http://localhost:8000` で `404 Not Found` が出る | 正常な動作（ルート `/` に画面はない） | エラーではありません。動作確認は `http://localhost:8000/docs`（API一覧）または `http://localhost:8000/api/health` で行ってください |
+| 起動ログに `Failed to load resident model nomic-embed-text` が出る | 古い版で、埋め込みモデルを `/api/generate` でウォームアップしようとしていた（embedding 専用モデルは generate 非対応のため 400） | 非致命的な警告で、検索などの動作には影響しません（実際の埋め込みは `/api/embed` を使用）。最新版では修正済みです。`git pull` で最新化すれば警告は出なくなります |
 
 ---
 
