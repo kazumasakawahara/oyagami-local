@@ -8,9 +8,9 @@ class Settings(BaseSettings):
     neo4j_password: str = "password"
 
     ollama_base_url: str = "http://localhost:11434"
-    coordinator_model: str = "mistral-small:latest"
+    coordinator_model: str = "gemma4:12b"
     intake_model: str = "deepseek-r1:70b"
-    validator_model: str = "mistral-small:latest"
+    validator_model: str = "gemma4:12b"
     analyst_model: str = "llama4:latest"
     cypher_model: str = "qwen3-coder:30b"
     embedding_model: str = "nomic-embed-text"

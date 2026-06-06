@@ -8,7 +8,7 @@ import { api } from "@/lib/api";
 
 const MODELS = {
   resident: [
-    { name: "mistral-small:latest", size: "14GB", role: "Coordinator / Validator" },
+    { name: "gemma4:12b", size: "6.7GB", role: "Coordinator / Validator" },
     { name: "nomic-embed-text", size: "0.3GB", role: "Embedding" },
   ],
   exclusive: [
