@@ -14,124 +14,133 @@ interface Props {
   className?: string;
 }
 
-/** カタカナをひらがなに正規化（読み仮名との曖昧一致用）。 */
+// 五十音の行頭 -> その行に属するひらがな（濁点・半濁点・小書きを含む）
+const KANA_ROWS: { head: string; members: string }[] = [
+  { head: "あ", members: "あいうえおぁぃぅぇぉゔ" },
+  { head: "か", members: "かきくけこがぎぐげご" },
+  { head: "さ", members: "さしすせそざじずぜぞ" },
+  { head: "た", members: "たちつてとだぢづでどっ" },
+  { head: "な", members: "なにぬねの" },
+  { head: "は", members: "はひふへほばびぶべぼぱぴぷぺぽ" },
+  { head: "ま", members: "まみむめも" },
+  { head: "や", members: "やゆよゃゅょ" },
+  { head: "ら", members: "らりるれろ" },
+  { head: "わ", members: "わをんゎ" },
+];
+
+/** カタカナをひらがなに正規化。 */
 function toHiragana(s: string): string {
   return s.replace(/[\u30a1-\u30f6]/g, (ch) =>
     String.fromCharCode(ch.charCodeAt(0) - 0x60)
   );
 }
-const norm = (s: string) => toHiragana(s).toLowerCase();
+
+/** 読み仮名の先頭文字から五十音行（行頭文字）を返す。該当なしは null（=「他」）。 */
+function rowOf(kana?: string | null): string | null {
+  if (!kana) return null;
+  const first = toHiragana(kana[0]);
+  const row = KANA_ROWS.find((r) => r.members.includes(first));
+  return row ? row.head : null;
+}
+
+type RowKey = "all" | "other" | string;
 
 /**
- * 名前直接入力＋曖昧検索のクライアント選択コンボボックス。
- * 入力文字列を name と kana（カナ正規化）の両方に部分一致させて候補を絞り込む。
+ * クライアント選択ピッカー。
+ * テキスト入力を持たず、「あかさたな…」のかな行チップで候補を絞り、リストからタップ選択する。
+ * 入力欄がないため日本語IMEの変換候補ウィンドウと干渉しない。
  */
 export function ClientCombobox({
   clients,
   value,
   onChange,
-  placeholder = "名前で検索...",
+  placeholder = "選択してください",
   className,
 }: Props) {
-  const [query, setQuery] = useState(value);
   const [open, setOpen] = useState(false);
-  const [hi, setHi] = useState(0);
+  const [row, setRow] = useState<RowKey>("all");
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  // 外部から value が変わった場合（フォームのリセット等）に入力欄へ反映。
-  useEffect(() => {
-    setQuery(value);
-  }, [value]);
-
-  const filtered = useMemo(() => {
-    const q = norm(query.trim());
-    if (!q) return clients;
-    return clients.filter(
-      (c) => norm(c.name).includes(q) || (c.kana ? norm(c.kana).includes(q) : false)
-    );
-  }, [clients, query]);
-
-  // 外側クリックで閉じ、入力欄を確定済みの値に戻す。
+  // 外側クリックで閉じる。
   useEffect(() => {
     function handle(e: MouseEvent) {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
         setOpen(false);
-        setQuery(value);
       }
     }
     document.addEventListener("mousedown", handle);
     return () => document.removeEventListener("mousedown", handle);
-  }, [value]);
+  }, []);
+
+  const filtered = useMemo(() => {
+    if (row === "all") return clients;
+    if (row === "other") return clients.filter((c) => rowOf(c.kana) === null);
+    return clients.filter((c) => rowOf(c.kana) === row);
+  }, [clients, row]);
 
   function select(name: string) {
     onChange(name);
-    setQuery(name);
     setOpen(false);
   }
 
-  function onKeyDown(e: React.KeyboardEvent) {
-    if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
-      setOpen(true);
-      return;
-    }
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setHi((h) => Math.min(h + 1, filtered.length - 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setHi((h) => Math.max(h - 1, 0));
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      if (filtered[hi]) select(filtered[hi].name);
-    } else if (e.key === "Escape") {
-      setOpen(false);
-      setQuery(value);
-    }
-  }
+  const chipBase = "px-2 py-0.5 rounded text-xs";
+  const chip = (active: boolean) =>
+    `${chipBase} ${active ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`;
 
   return (
     <div ref={wrapRef} className={`relative ${className ?? ""}`}>
-      <input
-        type="text"
-        value={query}
-        placeholder={placeholder}
-        onChange={(e) => {
-          setQuery(e.target.value);
-          setOpen(true);
-          setHi(0);
-        }}
-        onFocus={() => setOpen(true)}
-        onKeyDown={onKeyDown}
-        className="w-full border rounded px-3 py-2 text-sm"
-        role="combobox"
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full border rounded px-3 py-2 text-sm text-left flex items-center justify-between gap-2"
+        aria-haspopup="listbox"
         aria-expanded={open}
-        autoComplete="off"
-      />
+      >
+        <span className={value ? "" : "text-muted-foreground"}>{value || placeholder}</span>
+        <span className="text-muted-foreground" aria-hidden>▾</span>
+      </button>
+
       {open && (
-        <ul className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded border bg-popover text-popover-foreground shadow-md">
-          {filtered.length === 0 ? (
-            <li className="px-3 py-2 text-sm text-muted-foreground">該当なし</li>
-          ) : (
-            filtered.map((c, i) => (
-              <li
-                key={c.name}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  select(c.name);
-                }}
-                onMouseEnter={() => setHi(i)}
-                className={`flex cursor-pointer items-center justify-between px-3 py-2 text-sm ${
-                  i === hi ? "bg-accent text-accent-foreground" : ""
-                } ${c.name === value ? "font-medium" : ""}`}
-              >
-                <span>{c.name}</span>
-                {c.kana ? (
-                  <span className="ml-2 text-xs text-muted-foreground">{c.kana}</span>
-                ) : null}
-              </li>
-            ))
-          )}
-        </ul>
+        <div className="absolute z-50 mt-1 w-full min-w-[16rem] rounded border bg-popover text-popover-foreground shadow-md">
+          <div className="flex flex-wrap gap-1 p-2 border-b">
+            <button type="button" onClick={() => setRow("all")} className={chip(row === "all")}>
+              全て
+            </button>
+            {KANA_ROWS.map((r) => (
+              <button key={r.head} type="button" onClick={() => setRow(r.head)} className={chip(row === r.head)}>
+                {r.head}
+              </button>
+            ))}
+            <button type="button" onClick={() => setRow("other")} className={chip(row === "other")}>
+              他
+            </button>
+          </div>
+          <ul className="max-h-60 overflow-auto py-1" role="listbox">
+            {filtered.length === 0 ? (
+              <li className="px-3 py-2 text-sm text-muted-foreground">該当なし</li>
+            ) : (
+              filtered.map((c) => (
+                <li
+                  key={c.name}
+                  role="option"
+                  aria-selected={c.name === value}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    select(c.name);
+                  }}
+                  className={`flex cursor-pointer items-center justify-between px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground ${
+                    c.name === value ? "font-medium bg-accent/50" : ""
+                  }`}
+                >
+                  <span>{c.name}</span>
+                  {c.kana ? (
+                    <span className="ml-2 text-xs text-muted-foreground">{c.kana}</span>
+                  ) : null}
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
       )}
     </div>
   );
