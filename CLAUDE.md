@@ -110,7 +110,7 @@ uv run python scripts/backfill_embeddings.py
 
 ## Neo4j スキーマ規約
 
-`../neo4j-agno-agent/docs/NEO4J_SCHEMA_CONVENTION.md` に準拠する。
+`docs/SCHEMA_CONVENTION.md`（`~/Dev-Work/shared-schema/` から同期される正典コピー）に準拠する。
 
 - **ノード**: PascalCase（例: `Client`, `NgAction`, `SupportLog`）
 - **リレーション**: UPPER_SNAKE_CASE（例: `MUST_AVOID`, `HAS_KEY_PERSON`, `LOGGED`）
