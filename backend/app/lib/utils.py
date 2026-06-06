@@ -189,3 +189,49 @@ def format_date_with_age(birth_date: date | str) -> str:
     if age is not None:
         return f"{date_str}（{age}歳）"
     return date_str
+
+
+# =============================================================================
+# 五十音（かな行）フィルタ
+# =============================================================================
+
+# 行頭（ひらがな）-> その行に属するひらがな集合（濁点・半濁点・小書きを含む）
+_KANA_ROWS: dict[str, str] = {
+    "あ": "あいうえおぁぃぅぇぉゔ",
+    "か": "かきくけこがぎぐげご",
+    "さ": "さしすせそざじずぜぞ",
+    "た": "たちつてとだぢづでどっ",
+    "な": "なにぬねの",
+    "は": "はひふへほばびぶべぼぱぴぷぺぽ",
+    "ま": "まみむめも",
+    "や": "やゆよゃゅょ",
+    "ら": "らりるれろ",
+    "わ": "わをんゎ",
+}
+
+
+def _to_hiragana(ch: str) -> str:
+    """1文字のカタカナをひらがなに変換（それ以外はそのまま）。"""
+    if not ch:
+        return ch
+    code = ord(ch)
+    # カタカナ U+30A1–U+30F6 -> ひらがな（-0x60）
+    if 0x30A1 <= code <= 0x30F6:
+        return chr(code - 0x60)
+    return ch
+
+
+def matches_kana_row(kana: str | None, row_head: str) -> bool:
+    """kana の先頭文字が row_head（あ/か/さ…）の五十音行に属するかを返す。
+
+    カタカナはひらがなに正規化し、濁点・半濁点・小書きも同じ行として扱う。
+    kana が未設定（None/空）の場合は False。
+    """
+    if not kana:
+        return False
+    first = _to_hiragana(kana[0])
+    members = _KANA_ROWS.get(row_head)
+    if not members:
+        # 未知の行頭は従来通り前方一致にフォールバック
+        return kana.startswith(row_head)
+    return first in members

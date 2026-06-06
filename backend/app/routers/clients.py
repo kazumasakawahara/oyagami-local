@@ -7,7 +7,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Query
 
 from app.lib.db_operations import run_query
-from app.lib.utils import calculate_age
+from app.lib.utils import calculate_age, matches_kana_row
 from app.schemas.client import (
     CarePreference,
     ClientDetail,
@@ -50,7 +50,7 @@ def list_clients(
         summaries: list[ClientSummary] = []
         for row in rows:
             kana: str | None = row.get("kana")
-            if kana_prefix and (not kana or not kana.startswith(kana_prefix)):
+            if kana_prefix and not matches_kana_row(kana, kana_prefix):
                 continue
 
             dob = row.get("dob")
