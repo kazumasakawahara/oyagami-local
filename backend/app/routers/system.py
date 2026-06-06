@@ -7,14 +7,12 @@ import logging
 from fastapi import APIRouter, HTTPException
 
 from app.lib.db_operations import is_db_available
-from app.lib.model_manager import EXCLUSIVE_MODELS, RESIDENT_MODELS, model_manager
+from app.lib.model_manager import model_manager
 from app.schemas.agent import ModelStatusResponse
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/system", tags=["system"])
-
-_ALL_MANAGED_MODELS: frozenset[str] = RESIDENT_MODELS | EXCLUSIVE_MODELS
 
 
 @router.get("/status", response_model=ModelStatusResponse)
@@ -47,10 +45,10 @@ async def get_status() -> ModelStatusResponse:
 @router.post("/models/{model_name}/load")
 async def load_model(model_name: str) -> dict:
     """指定したモデルを Ollama にロードする。"""
-    if model_name not in _ALL_MANAGED_MODELS:
+    if model_name not in model_manager.managed_models:
         raise HTTPException(
             status_code=400,
-            detail=f"Unknown model '{model_name}'. Managed models: {sorted(_ALL_MANAGED_MODELS)}",
+            detail=f"Unknown model '{model_name}'. Managed models: {sorted(model_manager.managed_models)}",
         )
     try:
         await model_manager.ensure_model(model_name)
@@ -63,10 +61,10 @@ async def load_model(model_name: str) -> dict:
 @router.post("/models/{model_name}/unload")
 async def unload_model(model_name: str) -> dict:
     """指定したモデルを Ollama からアンロードする。"""
-    if model_name not in _ALL_MANAGED_MODELS:
+    if model_name not in model_manager.managed_models:
         raise HTTPException(
             status_code=400,
-            detail=f"Unknown model '{model_name}'. Managed models: {sorted(_ALL_MANAGED_MODELS)}",
+            detail=f"Unknown model '{model_name}'. Managed models: {sorted(model_manager.managed_models)}",
         )
     try:
         await model_manager.unload_model(model_name)

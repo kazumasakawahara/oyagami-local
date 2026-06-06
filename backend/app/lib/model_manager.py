@@ -87,6 +87,11 @@ class ModelManager:
             return False
         return self._current_exclusive != model
 
+    @property
+    def managed_models(self) -> frozenset[str]:
+        """All models this manager knows about (resident + exclusive)."""
+        return self._resident | self._exclusive
+
     # ------------------------------------------------------------------
     # Async operations
     # ------------------------------------------------------------------
