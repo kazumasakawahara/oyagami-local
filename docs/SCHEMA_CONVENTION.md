@@ -1,6 +1,6 @@
 <!-- AUTO-GENERATED COPY — DO NOT EDIT.
   Synced from ~/Dev-Work/shared-schema/SCHEMA_CONVENTION.md
-  Edit the master there and run sync-schema.sh. (synced: 20260706-193407) -->
+  Edit the master there and run sync-schema.sh. (synced: 20260808-162145) -->
 
 <!--
   ============================================================================
@@ -11,7 +11,7 @@
   ============================================================================
 -->
 
-# Neo4j スキーマ命名規則（Naming Convention）— 統一正典 v3.2
+# Neo4j スキーマ命名規則（Naming Convention）— 統一正典 v3.4
 
 > **このドキュメントは、support-db（障害福祉支援DB, port 7687）のノードラベル・リレーションシップタイプ・プロパティ名の唯一の正典（Single Source of Truth）です。**
 > すべての LLM（Claude, Gemini, Hermes/その他エージェント）およびすべてのコード（Python, Cypher テンプレート, Skills）は、このドキュメントに従ってください。
@@ -23,7 +23,10 @@
 
 ## 0. 適用範囲と対象DB
 
-- **対象**: 障害福祉支援DB（**port 7687**, コンテナ `support-db-neo4j`）のみ。
+- **対象**: 障害福祉支援DB（**port 7687**, コンテナ `nest-support-neo4j`）のみ。
+  > 訂正（2026-07-13）: 旧記載のコンテナ名 `support-db-neo4j` は誤り。同名の旧コンテナは
+  > 2026-04 に停止済みで、実データは `nest-support-neo4j`（bind mount `./neo4j_data`）に
+  > 正規化されている。
 - **対象外**: 生活困窮者自立支援DB（旧 port 7688 / `livelihood-support`）は **2026-05 に廃止**。本正典では扱いません。歴史的記録が必要な場合は `nest-support/decommissioned/` および各リポのGit履歴を参照してください。
 
 ---
@@ -80,8 +83,8 @@
 |---|---|---|---|
 | `Client` | 本人性 | 中心ノード（本人） | name, dob, bloodType, clientId, displayCode, kana, summaryEmbedding |
 | `Condition` | ケアの暗黙知 | 特性・医学的診断 | name, diagnosisDate, status |
-| `NgAction` | ケアの暗黙知 | 禁忌事項（**最重要**） | action, reason, riskLevel, embedding |
-| `CarePreference` | ケアの暗黙知 | 推奨ケア | category, instruction, priority, embedding |
+| `NgAction` | ケアの暗黙知 | 禁忌事項（**最重要**） | action, reason, riskLevel, source, sourceDetail, status, lastConfirmedAt, staleAfter, embedding |
+| `CarePreference` | ケアの暗黙知 | 推奨ケア | category, instruction, priority, source, sourceDetail, status, lastConfirmedAt, staleAfter, embedding |
 | `KeyPerson` | 危機管理 | キーパーソン・緊急連絡先 | name, relationship, phone, role |
 | `Guardian` | 法的基盤 | 成年後見人等 | name, type, phone, organization |
 | `Hospital` | 危機管理 | 医療機関 | name, specialty, phone |
@@ -100,6 +103,7 @@
 | `ProviderFeedback` | 多機関連携 | 事業所口コミ | feedbackId, category, content, rating |
 | `Relative` | 親の機能移行 | 家族・主たる介護者（親等） | name, relationship, healthStatus, age |
 | `CareRole` | 親の機能移行 | 親が担う機能・タスク（食事準備・服薬管理等） | name, frequency, priority, notes |
+| `Review` | 記録 | **確認記録**（「確認したうえで0件」と「未確認」を区別する唯一の手段） | domain, reviewedAt, source, note |
 
 ---
 
@@ -122,7 +126,8 @@
 | `SUPPORTED_BY` | Client → Supporter | since, until | 支援者の紐付け |
 | `LOGGED` | Supporter → SupportLog | — | 支援記録の作成 |
 | `RECORDED` | Supporter → MeetingRecord | — | 面談記録の作成（音声） |
-| `ABOUT` | SupportLog/MeetingRecord → Client | — | 記録の対象者 |
+| `REVIEWED` | Supporter → Review | — | 確認を行った支援者（追記のみ・更新しない） |
+| `ABOUT` | SupportLog/MeetingRecord/Review → Client | — | 記録の対象者 |
 | `FOLLOWS` | SupportLog → SupportLog | — | 時系列チェーン（新→旧） |
 | `AUDIT_FOR` | AuditLog → Client | — | 監査ログの対象クライアント |
 | `HAS_HISTORY` | Client → LifeHistory | — | 生育歴 |
@@ -135,6 +140,8 @@
 | `FAMILY_OF` | Relative → Client | — | 親以外の家族関係 |
 | `PERFORMS` | Relative → CareRole | — | 家族が担っている役割（第5の柱） |
 | `CAN_BE_PERFORMED_BY` | CareRole → ServiceProvider / Supporter / KeyPerson | — | 役割の代替手段（レジリエンス診断用） |
+| `CONTRADICTS` | 新観測（同種事実 / SupportLog / MeetingRecord）→ 既存事実（NgAction / CarePreference） | claim, raisedAt, source, resolvedAt, resolution, resolvedBy | **矛盾の保留**（証拠・鮮度モデル v3.4）。追記専用・裁定しても削除しない。`resolvedAt IS NULL` = 未解決（係争中）。§7.9 |
+| `CONFIRMS` | Review → 既存事実（NgAction / CarePreference） | — | **事実単位の確認**（証拠・鮮度モデル v3.4）。CONFIRMS の有無が「0件確認」と「個別確認」を区別する。追記専用。§7.9 |
 
 ---
 
@@ -238,6 +245,37 @@ WAM NET インポート時期によりレガシーの snake_case が残存。**�
 - `Monitoring`: 経過観察中など継続監視状態（例: 術後経過観察の Condition）。
 - 小文字 `active` 等は使わない（英語 PascalCase 固定）。
 
+### 7.7 Review.domain（確認した領域）
+対応するノードラベル名をそのまま使う（PascalCase）。
+
+`NgAction` / `CarePreference` / `KeyPerson` / `Guardian` / `Certificate` / `CareRole`
+
+> この6領域は「0件が安全・権利に直結する」ものに限定される。上記以外は使わない。
+> 意味と運用は SEMANTIC_MODEL ENU-16 / BRS-12。
+
+### 7.8 Review.source（情報源）
+**日本語値を許容**（§1.4 の例外。支援者が直接読む値のため）。
+
+`本人` / `母親` / `父親` / `家族・親族` / `主治医` / `前事業所` / `相談支援専門員` / `後見人等` / `記録のみ`
+
+> `記録のみ` は最も弱い情報源（人に確認していない）。意味は SEMANTIC_MODEL ENU-17。
+
+### 7.9 証拠・鮮度プロパティ（NgAction / CarePreference・v3.4 / 2026-08-08）
+
+Track A（証拠・鮮度モデル）Phase 1。技術仕様は oya-inai-db/docs/evidence-freshness-technical-spec.md（承認済み 2026-08-08）。
+
+| プロパティ | 型 | 必須 | 意味 |
+|---|---|---|---|
+| `source` | string | ✅ | 情報源。**ENU-17（Review.source）の語彙をそのまま使う**（新語彙なし） |
+| `sourceDetail` | string | — | 自由記述（例: 「2026-07 面談で母親から聴取」） |
+| `status` | string | ✅ | この2ラベルでは **`Active` / `Pending` / `Inactive` の3値に制限**（§7.6 の語彙の部分集合）。弱い書き込み経路（AI抽出・MCP直接）は `Pending` で作成される |
+| `lastConfirmedAt` | date | ✅ | 最終確認日。最新の CONFIRMS 元 Review の reviewedAt と常に一致（既存データの初期値は登録日） |
+| `staleAfter` | int（日数） | — | 鮮度期限の**個別上書き用**。未設定時は SEMANTIC_MODEL machine-check JSON の `freshnessDefaults`（ラベル既定値）を使う。Phase 1 の書き込み経路では書かない |
+
+**非対称ルール（最重要）**: NgAction は矛盾（未解決 CONTRADICTS）や期限超過があっても
+**警告は自動で消えない**。表示停止の唯一の経路は管理者裁定による `status: Inactive` 化
+（AuditLog 必須）。期限超過は「要再確認」への降格表示であり非表示ではない。
+
 ---
 
 ## 8. インデックスと制約
@@ -303,7 +341,13 @@ nest-support 系の Python 書き込み経路では、`lib/schema_validator.py`�
 `SupportLog`/`MeetingRecord`/`LifeHistory`/`Wish` は CREATE 時に `sourceHash`(SHA256) を自動生成。同一プロパティから決定的に同じハッシュ → 重複登録をスキップ。`AuditLog`/`PublicAssistance` は除外。
 
 ### 10.3 MERGE キー戦略
-- **Certificate**: 複合キー `["type","grade"]`（療育手帳A と B は別ノード。grade 未指定は "不明"）
+- **Certificate**: 複合キー `["type","grade"]`（療育手帳A と B は別ノード。**grade 未指定時は
+  登録処理が sentinel 値 "不明" を補完する**。補完の意図は複合 MERGE キーの欠落防止——
+  片方のキーが欠けると type 単独一致に退化し、等級違いが1ノードに潰れるため）。
+  - `"不明"` の意味は「**等級を把握していない**」であって「等級が無い」ではない
+    （BRS-04 の区別をここでも維持する。未把握を「なし」と読み替えてはならない）。
+  - **grade="不明" は data-quality-agent が欠損として検出する**（等級未把握の警告、
+    および実等級判明後に残る "不明" ノード＝残骸候補の検出）。
 - **ServiceProvider**: `wamnetId` があれば優先 MERGE（名前の表記揺れに強い）。なければ `name` でフォールバック。
 
 ### 10.4 セマンティック重複検出
@@ -388,6 +432,10 @@ REMOVE sp.office_name, sp.corp_name, sp.service_type, sp.office_number,
 
 | 日付 | バージョン | 変更内容 |
 |---|---|---|
+| 2026-08-08 | **v3.4** | **証拠・鮮度モデル（Track A Phase 1）の正典収載**（河原氏承認 2026-08-08・技術仕様は oya-inai-db/docs/evidence-freshness-technical-spec.md）。(1) §3 の `NgAction` / `CarePreference` に `source`（ENU-17 語彙）/ `sourceDetail` / `status`（3値制限）/ `lastConfirmedAt` / `staleAfter` を追加、(2) §4 に `CONTRADICTS`（矛盾の保留・追記専用）と `CONFIRMS`（Review→事実の個別確認）を新設、(3) §7.9 に値域・必須区分・**非対称ルール**（禁忌の警告は自動で消えない。解除は管理者裁定の Inactive 化のみ）を収載。鮮度既定値は SEMANTIC_MODEL machine-check JSON の `freshnessDefaults` が正。**要追従**: Guardian（schema_validator.py）・agno allowlist ×2 に CONTRADICTS / CONFIRMS を反映（同日実施） |
+| 2026-07-13 | **v3.3.2** | **§10.3 の grade="不明" sentinel を明文化**。従来の「grade 未指定は "不明"」の一言に、(1) 補完の意図＝複合 MERGE キーの欠落防止、(2) 意味＝「等級を把握していない」であって「等級が無い」ではない（BRS-04 の区別）、(3) data-quality-agent が欠損（等級未把握・残骸候補）として検出する旨を追記。コードコメント（nest `lib/db_operations.py`）が正典引用形式で参照する記載の実在を保証 |
+| 2026-07-13 | **v3.3.1** | §0 のコンテナ名誤記を修正（`support-db-neo4j` → `nest-support-neo4j`・訂正注記付き）。スキーマ本体の変更なし。あわせて v3.1〜v3.3 の「要追従」（agno 実行時 allowlist）は 2026-07-13 に完了（SEMANTIC_MODEL DRIFT-07 / DRIFT-10 解消） |
+| 2026-07-12 | **v3.3** | **`Review`（確認記録）ノードと `REVIEWED` リレーションを新設**。「確認したうえで0件」と「未確認」は、リレーションの不在としては区別がつかないが、現場での意味は正反対。(1) §3 に `Review`（domain, reviewedAt, source, note）を追加、(2) §4 に `REVIEWED`（Supporter→Review）を追加し `ABOUT` の元ノードに Review を追記、(3) §7.7/7.8 に domain（6値・PascalCase）と source（9値・日本語許容）の値域を収載。追記のみ（更新・削除をしない）。意味と表示規則は SEMANTIC_MODEL ENT-24 / BRS-12 / ENU-16-17 が正。**要追従**: agno 実行時 allowlist（`GET /api/narrative/schema`）と Guardian（`lib/schema_validator.py`）に Review / REVIEWED / domain・source の値域を反映すること（SEMANTIC_MODEL DRIFT-10） |
 | 2026-07-06 | **v3.2** | **かかりつけ医の構造化と status 拡張**。(1) `Doctor` ノード＋`HAS_DOCTOR`（Hospital→Doctor）を §3/§4 に追加し、`Hospital.doctor` 文字列プロパティを廃止（nest-support で `migrate_hospital_doctor_to_node.py` 適用済み・名寄せ対応）、(2) §7.6 に status 列挙を明文化し `Monitoring`（経過観察中）を追加（nest-support で `Condition.status` のケース正規化 `active`→`Active` も適用済み）。**要追従**: agno バックエンドの実行時 allowlist（`GET /api/narrative/schema`）にも Doctor / HAS_DOCTOR / status:Monitoring を反映すること |
 | 2026-06-11 | **v3.1** | **既使用スキーマの正典追記**。(1) 第5の柱（親の機能移行）の `Relative` / `CareRole` ノードと `IS_PARENT_OF` / `FAMILY_OF` / `PERFORMS` / `CAN_BE_PERFORMED_BY` リレーションを §3/§4 に追加（resilience-checker / onboarding-wizard / data-quality-agent が使用中）、(2) `SupportLog.emotion / triggerTag / context` を §3/§7 に追加（insight-agent / field-ui / EXTRACTION_PROMPT が使用中）、(3) §1.4 の日本語許容例外に triggerTag / context を追記 |
 | 2026-06-06 | **v3.0** | **統一正典化**。neo4j-agno-agent 版（v2.6）をベースに、(1) 7688/生活保護DBを全削除し7687専用に、(2) nest の Guardian Layer 記述を §9 に統合、(3) §2 を4経路＋将来エージェントの「強制力マップ」に刷新、(4) 実行時の権威=`/api/narrative/schema` を明記、(5) shared-schema をマスターとする編集ルール・同期前提を冒頭に追加 |
